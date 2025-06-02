@@ -1,0 +1,87 @@
+
+
+pipeline {
+    agent any
+    environment {
+    SONAR_SCANNER_HOME = tool 'SonarQubeScanner1'  // Name of your SonarQube scanner tool in Jenkins
+    HEROKU_API_KEY = credentials('heroku-api-key')
+    IMAGE_NAME = 'sit223-hd'
+    IMAGE_TAG = 'latest1'
+    APP_NAME = 'sit223-hd'
+    }
+
+    stages {
+        stage('Build') { 
+            steps {
+              dir('D:\\Github\\SIT223 Task7.3HD Project') {
+                script {
+              bat 'npm install'
+              bat 'npm run build'
+                }
+        }
+    }
+   }
+        stage('Test') {
+            steps {
+              dir('D:\\Github\\SIT223 Task7.3HD Project') {
+                script {
+              bat 'npm test'
+                }
+            }
+        }
+    }
+
+        stage('Code quality Analysis') {
+            steps {                
+                    withSonarQubeEnv('SonarQube') {  // Name of your SonarQube server configuration in Jenkins
+                        bat "${SONAR_SCANNER_HOME}\\bin\\sonar-scanner.bat " +
+                            "-Dsonar.projectKey=DINITH-MV_SIT223-Task7.3HD-Project " +
+                            "-Dsonar.organization=dinith-mv " +
+                            "-Dsonar.projectName='SIT223-Task7.3HD-Project' " +
+                            "-Dsonar.projectVersion=1.0 " +
+                            "-Dsonar.sources=./src " +
+                            "-Dsonar.language=js " +
+                            "-Dsonar.sourceEncoding=UTF-8 " +
+                            "-Dsonar.javascript.lcov.reportPaths=coverage/lcov.info " +
+                            "-Dsonar.exclusions=node_modules/**"
+                    }
+                
+            }
+        }
+
+
+
+        // stage('Security Analysis') {
+        //     steps {
+        //         bat """                      "C:\\Users\\Dinith\\AppData\\Local\\Jenkins\\.jenkins\\tools\\org.jenkinsci.plugins.DependencyCheck.tools.DependencyCheckInstallation\\OWASP-DC\\dependency-check\\bin\\dependency-check.bat" ^
+        //               --scan ./frontend ^
+        //               --format HTML ^
+        //               --out ./reports
+        //           """
+        //     }
+        // }
+
+        stage('Security Scan') {
+            steps {
+                    script {
+                            withCredentials([string(credentialsId: 'snyk-token-id', variable: 'SNYK_TOKEN')]) {
+                                                       
+                            bat "snyk auth %SNYK_TOKEN%"
+                            bat "snyk test --json-file-output=vuln.json || exit /b 0" 
+                            
+                    }
+                }
+            }
+        }
+    
+        stage('Deployment to Heroku') {
+            steps {
+                  bat "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                  bat "docker login --username=_ --password=HRKU-AAQLRyP_3Z2OJf5p6z77ySZP-QGNJnQfiAXCjX_8sSww_____wkUOCjs-hSR registry.heroku.com"
+                  bat "docker tag ${IMAGE_NAME}:${IMAGE_TAG} registry.heroku.com/${APP_NAME}/web"
+                  bat "docker push registry.heroku.com/${APP_NAME}/web"
+                  bat "git push https://heroku:${HEROKU_API_KEY}@git.heroku.com/${APP_NAME}.git HEAD:refs/heads/master"
+            }
+        }
+    }
+}
